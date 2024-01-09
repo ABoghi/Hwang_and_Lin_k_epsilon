@@ -518,15 +518,16 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
     implicit none
     real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,K_eps,dK_epsdy,eps_hat
     real*8, intent(out) :: aK_w,aK_e,sK
-    real*8 dev
+    real*8 dev, den_rest
 
-    dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy - sigmak * K_eps / 2.d0 )*detady ) &
+    den_rest = 0*(deta**2.d0) * dK_epsdy / ( 4.d0 * detady**2.d0)
+
+    dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy - 0*sigmak * K_eps / 2.d0 )*detady ) &
         /(4.d0*(sigmak+nut)*detady**2.d0)
 
-    aK_w = ( 5.d-1 - dev ) / ( 1.d0 + (deta**2.d0) * dK_epsdy / ( 4.d0 * detady**2.d0) )
-    aK_e = ( 5.d-1 + dev ) / ( 1.d0 + (deta**2.d0) * dK_epsdy / ( 4.d0 * detady**2.d0) )
-    sK = ( (nut*dUdy*dUdy - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) ) &
-        / ( 1.d0 + (deta**2.d0) * dK_epsdy / ( 4.d0 * detady**2.d0) )
+    aK_w = ( 5.d-1 - dev ) / ( 1.d0 + den_rest )
+    aK_e = ( 5.d-1 + dev ) / ( 1.d0 + den_rest )
+    sK = ( (nut*dUdy*dUdy - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) ) / ( 1.d0 + den_rest )
 
     end
 
@@ -539,10 +540,12 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
     implicit none
     real*8, intent(in) :: eps,Kt,nut,dnutdy,dUdy,deta,sigmae,Ce1,f1,Ce2,f2,d2etady2,detady,dsigmaedy,K_K,dK_Kdy
     real*8, intent(out) :: aE_w,aE_e,sE
-    real*8 K_min, Kb, dev
+    real*8 K_min, Kb, dev, den_rest
     logical method1
 
-    dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy - sigmae * K_K )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
+    den_rest = 0*(deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0)
+
+    dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy - 0*sigmae*K_K )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
 
     K_min = 1.d-60
 
@@ -550,17 +553,17 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     method1 = .true.
     if (method1) then
-        aE_w = ( 5.d-1 - dev ) / ( 1.d0 + (deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0) )
-        aE_e = ( 5.d-1 + dev ) / ( 1.d0 + (deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0) )
+        aE_w = ( 5.d-1 - dev ) / ( 1.d0 + den_rest )
+        aE_e = ( 5.d-1 + dev ) / ( 1.d0 + den_rest )
         if (dabs(Kt)<=K_min) then
             sE = Kb*eps/K_min
         else
             sE = Kb*eps/Kt
         endif
-        sE = sE / ( 1.d0 + (deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0) )
+        sE = sE / ( 1.d0 + den_rest )
     else
-        aE_w = ( (5.d-1 - dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + (deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0) )
-        aE_e = ( (5.d-1 + dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + (deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0) )
+        aE_w = ( (5.d-1 - dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + den_rest )
+        aE_e = ( (5.d-1 + dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + den_rest )
         sE = 0.d0 
     endif
     

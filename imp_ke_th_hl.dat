@@ -1,4 +1,4 @@
-.T.     ! flag
+.F.     ! flag
 1801        ! ny
 10000        ! niter
 150         ! Re_tau
