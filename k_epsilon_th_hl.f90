@@ -438,7 +438,7 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,K_K,K_eps,dK
             - depsdeta(j) * deps_hatdeta(j) * ( detady(j) / eps_min )**2.d0
         else 
             K_eps(j) = deps_hatdeta(j) * detady(j) / (eps_hat(j) + eps(j))
-            dK_epsdy(j) = ( d2eps_hatdeta2(j) * detady(j)**2.d0 + deps_hatdeta(j) * d2etady2(j) ) /eps_min &
+            dK_epsdy(j) = ( d2eps_hatdeta2(j) * detady(j)**2.d0 + deps_hatdeta(j) * d2etady2(j) ) / eps(j) &
             - depsdeta(j) * deps_hatdeta(j) * ( detady(j) / eps(j) )**2.d0
         endif
 
@@ -522,7 +522,7 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
 
     den_rest = 0*(deta**2.d0) * dK_epsdy / ( 4.d0 * detady**2.d0)
 
-    dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy - 0*sigmak * K_eps / 2.d0 )*detady ) &
+    dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy - sigmak * K_eps / 2.d0 )*detady ) &
         /(4.d0*(sigmak+nut)*detady**2.d0)
 
     aK_w = ( 5.d-1 - dev ) / ( 1.d0 + den_rest )
@@ -545,7 +545,7 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     den_rest = 0*(deta**2.d0) * dK_Kdy / ( 2.d0 * detady**2.d0)
 
-    dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy - 0*sigmae*K_K )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
+    dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy - sigmae*K_K )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
 
     K_min = 1.d-60
 
@@ -553,18 +553,24 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     method1 = .true.
     if (method1) then
-        aE_w = ( 5.d-1 - dev ) / ( 1.d0 + den_rest )
-        aE_e = ( 5.d-1 + dev ) / ( 1.d0 + den_rest )
+        aE_w = ( 5.d-1 - dev )
+        aE_e = ( 5.d-1 + dev ) 
         if (dabs(Kt)<=K_min) then
             sE = Kb*eps/K_min
         else
             sE = Kb*eps/Kt
         endif
-        sE = sE / ( 1.d0 + den_rest )
+        sE = sE 
     else
-        aE_w = ( (5.d-1 - dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + den_rest )
-        aE_e = ( (5.d-1 + dev)/(1.d0 - Kb/Kt) ) / ( 1.d0 + den_rest )
+        aE_w = ( (5.d-1 - dev)/(1.d0 - Kb/Kt) ) 
+        aE_e = ( (5.d-1 + dev)/(1.d0 - Kb/Kt) ) 
         sE = 0.d0 
+    endif
+
+    if(den_rest .ne. -1.d0) then
+        aE_w = aE_w / ( 1.d0 + den_rest )
+        aE_w = aE_w / ( 1.d0 + den_rest )
+        sE = sE / ( 1.d0 + den_rest )
     endif
     
     end
