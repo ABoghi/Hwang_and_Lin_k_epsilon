@@ -431,6 +431,14 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,Pi_K,Pi_eps,
 
     call ddeta(ny,eps,depsdeta,deta)
 
+    Pi_K = - 0.5d0 * (Kt / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
+    - 0.5d0 * ( dKtdeta - Kt * ( depsdeta + deps_hatdeta ) / ( eps + eps_hat) ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)
+    print*, 'Pi_K(1) = ',Pi_K(1), ' Pi_K(2) = ',Pi_K(2),' Pi_K(ny-1) = ',Pi_K(ny-1),' Pi_K(ny) = ',Pi_K(ny)
+
+    Pi_eps = - (eps / Kt) * ( d2Ktdeta2 * ( detady )**2.d0 + dKtdeta * d2etady2 ) &
+    - ( depsdeta - eps * dKtdeta / Kt ) * dKtdeta * ( detady**2.d0 ) / Kt
+    print*, 'Pi_eps(1) = ',Pi_eps(1), ' Pi_eps(2) = ',Pi_eps(2),' Pi_eps(ny-1) = ',Pi_eps(ny-1),' Pi_eps(ny) = ',Pi_eps(ny)
+
     end
 
 !!!***************************************************
@@ -503,7 +511,7 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
 
     aK_w = ( 5.d-1 - dev )
     aK_e = ( 5.d-1 + dev )
-    sK = ( (nut*dUdy*dUdy - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
+    sK = ( (nut*dUdy*dUdy + 0.d0*Pi_K - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
 
     end
 
@@ -523,7 +531,7 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     K_min = 1.d-60
 
-    Kb = (Ce1*f1*nut*dUdy*dUdy -Ce2*f2*eps)*(deta*deta/(2.d0*(1.d0+nut/sigmae)*detady**2.d0))
+    Kb = (Ce1*f1*nut*dUdy*dUdy + 0.d0*Pi_eps -Ce2*f2*eps)*(deta*deta/(2.d0*(1.d0+nut/sigmae)*detady**2.d0))
 
     method1 = .true.
     if (method1) then
