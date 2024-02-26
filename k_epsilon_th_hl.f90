@@ -154,7 +154,7 @@ Program main_K_epsilon
     allocate(Peps(1:ny),Teps(1:ny),Deps(1:ny),epseps(1:ny))
 
     call output_fields_k_eps(ny,U,Kt,eps,nut,f1,f2,deta,sigmaK,sigmaE,Ce1,Ce2,tau_mu,tau_R,Pk,Tk,Dk,Peps,Teps,Deps,epseps, &
-        dsigmakdy,dsigmaedy, detady, d2etady2, Pik, Pieps)
+        dsigmakdy,dsigmaedy, detady, d2etady2)
 
     write(fname_ke,111)'momentumNT_var_Re_tau=',int(Re_tau),'_log10(Pr)=',int(log10(Pr)),'.csv'
     111 format(a22,i3,a11,i2,a4)
@@ -163,7 +163,7 @@ Program main_K_epsilon
     write(14,*) '"y","U","k","epsilon","nut","tau_mu","tau_R","Pk","Tk","Dk","Peps","Teps","Deps","epsEps","Pik","Pieps","epsk"'
     do j=1,ny
        write(14,101) y(j),',',U(j),',',Kt(j),',',eps(j),',',nut(j),',',tau_mu(j),',',tau_R(j),',',Pk(j),',',Tk(j),',',Dk(j),',', &
-       Peps(j),',',Teps(j),',',Deps(j),',',epsEps(j),',',Pik(j),',',Pieps(j),',',-(eps(j)+eps_hat(j))
+       Peps(j),',',Teps(j),',',Deps(j),',',epsEps(j),',',Pi_k(j),',',Pi_eps(j),',',-(eps(j)+eps_hat(j))
     enddo
     close(14)
 
@@ -372,6 +372,7 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,Pi_K,Pi_eps,
     real*8, intent(out) :: nut(1:ny),sigmak(1:ny),sigmae(1:ny),eps_hat(1:ny),Pi_K(1:ny),Pi_eps(1:ny)
     real*8 y_lambda(1:ny), fmu(1:ny), uk(1:ny), dukdeta(1:ny),dukdy(1:ny),depsdeta(1:ny)
     real*8 dKtdeta(1:ny),d2Ktdeta2(1:ny),deps_hatdeta(1:ny),d2eps_hatdeta2(1:ny),Kt_min,eps_min
+    real*8 d2epsdeta2(1:ny)
     integer j
 
     Kt_min = 1.d-60
@@ -433,11 +434,18 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,Pi_K,Pi_eps,
 
     Pi_K = - 0.5d0 * (Kt / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
     - 0.5d0 * ( dKtdeta - Kt * ( depsdeta + deps_hatdeta ) / ( eps + eps_hat) ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)
-    print*, 'Pi_K(1) = ',Pi_K(1), ' Pi_K(2) = ',Pi_K(2),' Pi_K(ny-1) = ',Pi_K(ny-1),' Pi_K(ny) = ',Pi_K(ny)
+    !print*, 'Pi_K(1) = ',Pi_K(1), ' Pi_K(2) = ',Pi_K(2),' Pi_K(ny-1) = ',Pi_K(ny-1),' Pi_K(ny) = ',Pi_K(ny)
 
     Pi_eps = - (eps / Kt) * ( d2Ktdeta2 * ( detady )**2.d0 + dKtdeta * d2etady2 ) &
     - ( depsdeta - eps * dKtdeta / Kt ) * dKtdeta * ( detady**2.d0 ) / Kt
-    print*, 'Pi_eps(1) = ',Pi_eps(1), ' Pi_eps(2) = ',Pi_eps(2),' Pi_eps(ny-1) = ',Pi_eps(ny-1),' Pi_eps(ny) = ',Pi_eps(ny)
+
+    call d2deta2(ny,eps,d2epsdeta2,deta)
+
+    !!! Wall approximation
+    Pi_eps(1) = (Pi_eps(2) * y(3) - Pi_eps(3) * y(2)) / (y(3) - y(2))
+    Pi_eps(ny) = Pi_eps(ny-1) + (Pi_eps(ny-1) - Pi_eps(ny-2))*(y(ny)-y(ny-1))/(y(ny-1)-y(ny-2))
+
+    !print*, 'Pi_eps(1) = ',Pi_eps(1), ' Pi_eps(2) = ',Pi_eps(2),' Pi_eps(ny-1) = ',Pi_eps(ny-1),' Pi_eps(ny) = ',Pi_eps(ny)
 
     end
 
@@ -614,16 +622,15 @@ subroutine  Th2_coefficients(aTh2_w,aTh2_e,sTh2,nut,dnutdy,lambda,dlambdadT,d2la
 !!!*************************************************
 
 subroutine  output_fields_k_eps(ny,U,Kt,eps,nut,f1,f2,deta,sigmaK,sigmaE,Ce1,Ce2,tau_mu,tau_R,Pk,Tk,Dk,Peps,Teps,Deps,epseps, &
-    dsigmakdy, dsigmaedy, detady, d2etady2, Pik, Pieps)
+    dsigmakdy, dsigmaedy, detady, d2etady2)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: deta,sigmaK(1:ny),sigmaE(1:ny),Ce1,Ce2,f1,f2,Kt(1:ny),eps(1:ny),nut(1:ny),U(1:ny)
     real*8, intent(in) :: detady(1:ny),d2etady2(1:ny),dsigmakdy(1:ny),dsigmaedy(1:ny)
     real*8, INTENT(OUT) :: tau_mu(1:ny),tau_R(1:ny),Pk(1:ny),Tk(1:ny),Dk(1:ny)
-    real*8, INTENT(OUT) :: Peps(1:ny),Teps(1:ny),Deps(1:ny),epseps(1:ny),Pik(1:ny),Pieps(1:ny)
+    real*8, INTENT(OUT) :: Peps(1:ny),Teps(1:ny),Deps(1:ny),epseps(1:ny)
     real*8 dUdy(1:ny),d2Ktdeta2(1:ny),d2epsdeta2(1:ny),dKtdeta(1:ny),depsdeta(1:ny),dnutdy(1:ny),dUdeta(1:ny),dnutdeta(1:ny)
-    real*8 uk(1:ny),tau(1:ny),omega(1:ny),eps_hat(1:ny),dtaudeta(1:ny),domegadeta(1:ny),dukdeta(1:ny),deps_hatdeta(1:ny)
-    real*8 dukdy(1:ny),d2eps_hatdeta2(1:ny),Kt_min,eps_min
+    real*8 Kt_min,eps_min
     integer j
 
     call ddeta(ny,U,dUdeta,deta)
@@ -641,8 +648,9 @@ subroutine  output_fields_k_eps(ny,U,Kt,eps,nut,f1,f2,deta,sigmaK,sigmaE,Ce1,Ce2
     Dk = d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2
     Tk = (nut/sigmaK)*Dk + (dKtdeta*detady/sigmaK)*dnutdy - (nut/sigmaK**2.d0) * dKtdeta * detady * dsigmakdy
 
-    Peps(2:ny) = f1*Ce1*(eps(2:ny)/Kt(2:ny))*Pk(2:ny)
+    Peps = f1*Ce1*(eps/Kt)*Pk
     Peps(1) = Peps(2)
+    Peps(ny) = Peps(ny-1)
 
     call d2deta2(ny,eps,D2epsdeta2,deta)
     call ddeta(ny,eps,depsdeta,deta)
@@ -658,41 +666,6 @@ subroutine  output_fields_k_eps(ny,U,Kt,eps,nut,f1,f2,deta,sigmaK,sigmaE,Ce1,Ce2
             epsEps(j) = -f2*Ce2*(eps(j)/Kt(j))*eps(j)
         endif
     enddo
-
-        do j=1,ny
-        uk(j)= dsqrt(dabs(Kt(j)))
-    enddo
-
-    call ddeta(ny,uk,dukdeta,deta)
-    dukdy = dukdeta*detady
-
-    eps_hat = 2.d0 * (dukdy)**2.d0
-
-    do j=1,ny
-        if(dabs(eps_hat(j) + eps(j))<=eps_min) then
-            tau(j) = Kt(j) / eps_min
-        else 
-            tau(j) = Kt(j) / (eps_hat(j) + eps(j))
-        endif
-    enddo
-    do j=1,ny
-        if(dabs(Kt(j))<=Kt_min) then
-            omega(j) = eps(j) / Kt_min
-        else
-            omega(j) = eps(j) / Kt(j)
-        endif
-    enddo
-    call ddeta(ny,tau,dtaudeta,deta)
-    call ddeta(ny,omega,domegadeta,deta)
-    call d2deta2(ny,eps_hat,d2eps_hatdeta2,deta)
-    call ddeta(ny,eps_hat,deps_hatdeta,deta)
-    !!! This the Problematic term.
-    Pik = -0.5d0 * ( tau * (d2eps_hatdeta2*detady**2.d0 + deps_hatdeta*d2etady2) + dtaudeta * deps_hatdeta * (detady)**2.d0 )
-
-    call ddeta(ny,Kt,dKtdeta,deta)
-    call d2deta2(ny,Kt,d2Ktdeta2,deta)
-    
-    Pieps= - ( omega * (d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2) + domegadeta * dKtdeta * (detady)**2.d0 )
     
     end
 
