@@ -244,6 +244,8 @@ subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,
                 eps(j) = (y(j)*Kappa -y(j)*y(j)*Kappa/Re_tau)/(Kappa*y(j))**2.d0 !
                 Kt(j) = dsqrt( (y(j)*Kappa -y(j)*y(j)*Kappa/Re_tau)*eps(j)/Cmu ) ! 0.019678d0 * y(j) * y(j) / ( 1.d0 + ( ( y(j) - 7.28d0 )**2.d0 ) / 88.263d0 ) !
             endif
+            eps(j) = (3.81304992d-03 * y(j)**2.d0)/(1.d0 + 3.14598063d-02 * y(j)**2.d0 + 2.68030359d-05 * y(j)**4.d0) !!!0.1d0*((y(j)/12.5d0)**2.d0)*dexp(2.d0*(1.d0 - (y(j)/12.5d0)))
+            Kt(j) = (9.67207675d-02 * y(j)**2.d0)/(1.d0 + 2.13956115d-02 * y(j)**2.d0 + 9.54542582d-06 * y(j)**4.d0) !!!3.6d0*((y(j)/14d0)**2.d0)*dexp(2.d0*(1.d0 - (y(j)/14d0)))
         enddo
 
         !Kt = 0.01d0*y**2.d0
@@ -257,6 +259,14 @@ subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,
             eps(j) = eps(ny+1-j)
             Kt(j) = Kt(ny+1-j)
         enddo
+
+        eps(ny/2) = ( eps(ny/2-1) + eps(ny/2+1) )/2.d0
+        Kt(ny/2) = ( Kt(ny/2-1) + Kt(ny/2+1) )/2.d0
+        U(ny/2) = ( U(ny/2-1) + U(ny/2+1) )/2.d0
+
+        call linear_variable_smoother(eps,eps,y,ny)
+        call linear_variable_smoother(Kt,Kt,y,ny)
+        call linear_variable_smoother(U,U,y,ny)
 
         !!! Hwang and Lin correction
         uk = dsqrt(dabs(Kt))
@@ -445,6 +455,10 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,Pi_K,Pi_eps,
     Pi_eps(1) = (Pi_eps(2) * y(3) - Pi_eps(3) * y(2)) / (y(3) - y(2))
     Pi_eps(ny) = Pi_eps(ny-1) + (Pi_eps(ny-1) - Pi_eps(ny-2))*(y(ny)-y(ny-1))/(y(ny-1)-y(ny-2))
 
+    !!! smooth profiles
+    call linear_variable_smoother(Pi_K,Pi_K,y,ny)
+    call linear_variable_smoother(Pi_eps,Pi_eps,y,ny)
+
     !print*, 'Pi_eps(1) = ',Pi_eps(1), ' Pi_eps(2) = ',Pi_eps(2),' Pi_eps(ny-1) = ',Pi_eps(ny-1),' Pi_eps(ny) = ',Pi_eps(ny)
 
     end
@@ -519,7 +533,7 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
 
     aK_w = ( 5.d-1 - dev )
     aK_e = ( 5.d-1 + dev )
-    sK = ( (nut*dUdy*dUdy + 0.d0*Pi_K - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
+    sK = ( (nut*dUdy*dUdy + 1.d0*Pi_K - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
 
     end
 
@@ -539,7 +553,7 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     K_min = 1.d-60
 
-    Kb = (Ce1*f1*nut*dUdy*dUdy + 0.d0*Pi_eps -Ce2*f2*eps)*(deta*deta/(2.d0*(1.d0+nut/sigmae)*detady**2.d0))
+    Kb = (Ce1*f1*nut*dUdy*dUdy + 1.d0*Pi_eps -Ce2*f2*eps)*(deta*deta/(2.d0*(1.d0+nut/sigmae)*detady**2.d0))
 
     method1 = .true.
     if (method1) then
@@ -1103,3 +1117,53 @@ subroutine  solve_Th2(Th2,nut,dnutdy,lambda,dlambdadT,d2lambdadT2,dTdy,d2Tdy2,Pr
     
 
     end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*           Quadratic Variable Smoother                     *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  quadratic_variable_smoother(phi_hat,phi,y,ny)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: phi(1:ny),y(1:ny)
+    real*8, intent(out) :: phi_hat(1:ny)
+    real*8 alpha,beta, gamma, delta
+    integer j
+
+    phi_hat = phi
+
+    do j=2,ny-1
+        delta = (y(j+1) - y(j)) / (y(j) - y(j-1))
+        alpha = ( 2.d0 - delta )/6.d0
+        gamma = ( 2.d0 - 1.d0 / delta )/6.d0
+        beta = 1.d0 - alpha - gamma
+        phi_hat(j) = alpha * phi(j-1) + beta * phi(j) + gamma * phi(j+1)
+    enddo
+    
+
+    end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*           Linear Variable Smoother                     *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  linear_variable_smoother(phi_hat,phi,y,ny)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: phi(1:ny),y(1:ny)
+    real*8, intent(out) :: phi_hat(1:ny)
+    integer j
+
+    phi_hat = phi
+
+    do j=2,ny-1
+        phi_hat(j) = ( phi(j-1) + 2.d0 * phi(j) + phi(j+1) ) / 4.d0
+    enddo
+    
+
+    end
+
