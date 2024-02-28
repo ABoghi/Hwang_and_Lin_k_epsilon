@@ -499,13 +499,15 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
     implicit none
     real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Up_w,Up_e,eps_hat
     real*8, intent(out) :: aK_w,aK_e,sK
-    real*8 dev
+    real*8 dev, conv
 
     dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy )*detady ) &
         /(4.d0*(sigmak+nut)*detady**2.d0)
 
-    aK_w = ( 5.d-1 - dev )
-    aK_e = ( 5.d-1 + dev )
+    conv = sigmak * deta / ( 4.d0 * (sigmak+nut) * detady)
+
+    aK_w = ( 5.d-1 - dev + conv * Up_w )
+    aK_e = ( 5.d-1 + dev - conv * Up_e )
     sK = ( (nut*dUdy*dUdy - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
 
     end
@@ -519,10 +521,12 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
     implicit none
     real*8, intent(in) :: eps,Kt,nut,dnutdy,dUdy,deta,sigmae,Ce1,f1,Ce2,f2,d2etady2,detady,dsigmaedy,Up_w,Up_e
     real*8, intent(out) :: aE_w,aE_e,sE
-    real*8 K_min, Kb, dev
+    real*8 K_min, Kb, dev, conv
     logical method1
 
     dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
+
+    conv = sigmae * deta / ( 4.d0 * (sigmae+nut) * detady)
 
     K_min = 1.d-60
 
@@ -530,8 +534,8 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
 
     method1 = .true.
     if (method1) then
-        aE_w = ( 5.d-1 - dev )
-        aE_e = ( 5.d-1 + dev ) 
+        aE_w = ( 5.d-1 - dev + conv * Up_w )
+        aE_e = ( 5.d-1 + dev - conv * Up_e ) 
         if (dabs(Kt)<=K_min) then
             sE = Kb*eps/K_min
         else
@@ -539,8 +543,8 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
         endif
         sE = sE 
     else
-        aE_w = ( (5.d-1 - dev)/(1.d0 - Kb/Kt) ) 
-        aE_e = ( (5.d-1 + dev)/(1.d0 - Kb/Kt) ) 
+        aE_w = ( (5.d-1 - dev + conv * Up_w)/(1.d0 - Kb/Kt) ) 
+        aE_e = ( (5.d-1 + dev - conv * Up_e)/(1.d0 - Kb/Kt) ) 
         sE = 0.d0 
     endif
     
@@ -931,6 +935,10 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
 
     upk = 0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
 
+    !!! wall correction
+    upk(1) = 0.d0
+    upk(ny) = 0.d0
+
     Kt(1) = 0.d0
     call K_coefficients(aK_w,aK_e,sK,eps(2),nut(2),dnutdy(2),dUdy(2),deta,sigmak(2),dsigmakdy(2),upk(1),upk(3), &
         eps_hat(2), d2etady2(2),detady(2))
@@ -982,6 +990,10 @@ subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmae
     call ddeta(ny,Kt,dKtdeta,deta)
 
     upeps = dKtdeta * detady / Kt
+
+    !!! wall correction
+    upeps(1) = 0.d0
+    upeps(ny) = 0.d0
 
     eps(1) = 0.d0
     call E_coefficients(aE_w,aE_e,sE,eps(2),Kt(2),nut(2),dnutdy(2),dUdy(2),deta,sigmae(2),dsigmaedy(2),upeps(1),upeps(3), &
