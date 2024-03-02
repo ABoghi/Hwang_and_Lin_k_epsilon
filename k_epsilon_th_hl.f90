@@ -495,20 +495,25 @@ subroutine  u_coefficients(aU_w,aU_e,sU,nut,dnutdy,deta,Re_tau,d2etady2,detady)
 !!!*                K coefficients	       	   *
 !!!*								                   *
 !!!***************************************************
-subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakdy,Up_w,Up_e,eps_hat,d2etady2,detady)
+subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakdy,Up,dUpdy,eps_hat,d2etady2,detady)
     implicit none
-    real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Up_w,Up_e,eps_hat
+    real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Up,dUpdy,eps_hat
     real*8, intent(out) :: aK_w,aK_e,sK
-    real*8 dev, conv
+    real*8 diff, conv, u_plus, u_minus, b_w, b_e, b_p
 
-    dev = deta*( (sigmak+nut)*d2etady2 + ( dnutdy -(nut/sigmak)*dsigmakdy )*detady ) &
-        /(4.d0*(sigmak+nut)*detady**2.d0)
+    call positive_part(u_plus,up)
+    call negative_part(u_minus,up)
 
-    conv = sigmak * deta / ( 4.d0 * (sigmak+nut) * detady)
+    diff = (1.d0+nut/sigmak)*(1.d0/deta)*detady**2.d0
+    conv = (1.d0/(2.d0*sigmak))*( (sigmak+nut)*d2etady2 + detady*(dnutdy -(nut/sigmak)*dsigmakdy) )
 
-    aK_w = ( 5.d-1 - dev + conv * Up_w )
-    aK_e = ( 5.d-1 + dev - conv * Up_e )
-    sK = ( (nut*dUdy*dUdy - eps_hat - eps)*(deta*deta)/(2.d0*(1.d0+nut/sigmak)*detady**2.d0) )
+    b_w = ( diff - conv + u_plus*detady )/deta
+    b_e = ( diff + conv - u_minus*detady )/deta 
+    b_p = b_w + b_e + dUpdy
+
+    aK_w = b_w / b_p
+    aK_e = b_e / b_p
+    sK = (nut*dUdy*dUdy - eps_hat - eps) / b_p
 
     end
 
@@ -517,34 +522,38 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
 !!!*                E coefficients	       	   *
 !!!*								                   *
 !!!***************************************************
-subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigmaedy,Up_w,Up_e,Ce1,f1,Ce2,f2,d2etady2,detady)
+subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigmaedy,Up,dUpdy,Ce1,f1,Ce2,f2,d2etady2,detady)
     implicit none
-    real*8, intent(in) :: eps,Kt,nut,dnutdy,dUdy,deta,sigmae,Ce1,f1,Ce2,f2,d2etady2,detady,dsigmaedy,Up_w,Up_e
+    real*8, intent(in) :: eps,Kt,nut,dnutdy,dUdy,deta,sigmae,Ce1,f1,Ce2,f2,d2etady2,detady,dsigmaedy,Up,dUpdy
     real*8, intent(out) :: aE_w,aE_e,sE
-    real*8 K_min, Kb, dev, conv
+    real*8 K_min, eps_b, diff, conv, u_plus, u_minus, b_w, b_e, b_p
     logical method1
 
-    dev = deta*( (sigmae+nut)*d2etady2 + ( dnutdy -(nut/sigmae)*dsigmaedy )*detady )/(4.d0*(sigmae+nut)*detady**2.d0)
+    call positive_part(u_plus,up)
+    call negative_part(u_minus,up)
 
-    conv = sigmae * deta / ( 4.d0 * (sigmae+nut) * detady)
+    diff = (1.d0+nut/sigmae)*(1.d0/deta)*detady**2.d0
+    conv = (1.d0/(2.d0*sigmae))*( (sigmae+nut)*d2etady2 + detady*(dnutdy -(nut/sigmae)*dsigmaedy) )
+
+    b_w = ( diff - conv + u_plus*detady )/deta
+    b_e = ( diff + conv - u_minus*detady )/deta 
+    b_p = b_w + b_e + dUpdy
+
+    eps_b = (Ce1*f1*nut*dUdy*dUdy -Ce2*f2*eps)
 
     K_min = 1.d-60
-
-    Kb = (Ce1*f1*nut*dUdy*dUdy -Ce2*f2*eps)*(deta*deta/(2.d0*(1.d0+nut/sigmae)*detady**2.d0))
-
     method1 = .true.
     if (method1) then
-        aE_w = ( 5.d-1 - dev + conv * Up_w )
-        aE_e = ( 5.d-1 + dev - conv * Up_e ) 
+        aE_w = b_w / b_p
+        aE_e = b_e / b_p
         if (dabs(Kt)<=K_min) then
-            sE = Kb*eps/K_min
+            sE = eps_b*eps / ( b_p * K_min )
         else
-            sE = Kb*eps/Kt
+            sE = eps_b*eps / ( b_p * Kt )
         endif
-        sE = sE 
     else
-        aE_w = ( (5.d-1 - dev + conv * Up_w)/(1.d0 - Kb/Kt) ) 
-        aE_e = ( (5.d-1 + dev - conv * Up_e)/(1.d0 - Kb/Kt) ) 
+        aE_w = ( b_w / ( b_p - eps_b / Kt) ) 
+        aE_e = ( b_w / ( b_p - eps_b / Kt) ) 
         sE = 0.d0 
     endif
     
@@ -928,31 +937,36 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
     real*8, intent(in) :: dsigmakdy(1:ny),eps_hat(1:ny)
     real*8, intent(inout) :: Kt(1:ny)
     real*8 aK_w,aK_e,sK
-    real*8 A(1:ny),C_apex(1:ny),denominator,deps_hatdeta(1:ny),upk(1:ny)
+    real*8 A(1:ny),C_apex(1:ny),denominator,deps_hatdeta(1:ny),upk(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
     integer j
 
     call ddeta(ny,eps_hat,deps_hatdeta,deta)
+    call ddeta(ny,eps,depsdeta,deta)
+    call d2deta2(ny,eps_hat,d2eps_hatdeta2,deta)
 
     upk = 0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
+
+    dupkdy = ( 0.5d0 / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
+    - 0.5d0 * ( depsdeta + deps_hatdeta ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)**2.d0
 
     !!! wall correction
     upk(1) = 0.d0
     upk(ny) = 0.d0
 
     Kt(1) = 0.d0
-    call K_coefficients(aK_w,aK_e,sK,eps(2),nut(2),dnutdy(2),dUdy(2),deta,sigmak(2),dsigmakdy(2),upk(1),upk(3), &
-        eps_hat(2), d2etady2(2),detady(2))
+    call K_coefficients(aK_w,aK_e,sK,eps(2),nut(2),dnutdy(2),dUdy(2),deta,sigmak(2),dsigmakdy(2),upk(2), &
+        dupkdy(2), eps_hat(2), d2etady2(2),detady(2))
     A(2) = aK_e
     C_apex(2) = sK + aK_w * Kt(1)
     do j =3,ny-1
-        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j),upk(j-1),upk(j+1), &
+        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j),upk(j),dupkdy(j), &
             eps_hat(j),d2etady2(j),detady(j))
         denominator = ( 1.d0 - aK_w * A(j-1) )
         A(j) = aK_e / denominator
         C_apex(j) = ( aK_w * C_apex(j-1) + sK ) / denominator
         !print*, ' A(j) = ', A(j),' C_apex(j) = ', C_apex(j)
     enddo
-    !call K_coefficients(aK_w,aK_e,sK,eps(ny),nut(ny),dnutdy(ny),dUdy(ny),deta,sigmak(ny),dsigmakdy(ny),upk(ny-1),upk(ny+1),eps_hat(ny),d2etady2(ny),detady(ny))
+    !call K_coefficients(aK_w,aK_e,sK,eps(ny),nut(ny),dnutdy(ny),dUdy(ny),deta,sigmak(ny),dsigmakdy(ny),upk(ny),dupkdy(ny),eps_hat(ny),d2etady2(ny),detady(ny))
     !denominator = ( 1.d0 - aK_w * A(ny-1) )
     !A(ny) = aK_e / denominator
     !C_apex(ny) = ( aK_w * C_apex(ny-1) + sK ) / denominator
@@ -960,7 +974,7 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
     Kt(ny) = 0.d0
     
     do j =2,ny-1
-        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j),upk(j-1),upk(j+1), &
+        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j),upk(j),dupkdy(j), &
             eps_hat(j), d2etady2(j),detady(j))
         Kt(j) = sK + aK_e*Kt(j+1) + aK_w*Kt(j-1)
     enddo
@@ -984,37 +998,41 @@ subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmae
     real*8, intent(in) :: ce1,ce2,f1,f2,dsigmaedy(1:ny),eps_hat(1:ny)
     real*8, intent(inout) :: eps(1:ny)
     real*8 aE_w,aE_e,sE
-    real*8 A(1:ny),C_apex(1:ny),denominator,dKtdeta(1:ny),upeps(1:ny)
+    real*8 A(1:ny),C_apex(1:ny),denominator,dKtdeta(1:ny),upeps(1:ny),duepsdy(1:ny),d2Ktdeta2(1:ny)
     integer j
 
     call ddeta(ny,Kt,dKtdeta,deta)
+    call d2deta2(ny,Kt,d2Ktdeta2,deta)
 
     upeps = dKtdeta * detady / Kt
+
+    duepsdy = (1.d0 / Kt) * ( d2Ktdeta2 * ( detady )**2.d0 + dKtdeta * d2etady2 ) &
+    - ( dKtdeta * detady / Kt ) **2.d0
 
     !!! wall correction
     upeps(1) = 0.d0
     upeps(ny) = 0.d0
 
     eps(1) = 0.d0
-    call E_coefficients(aE_w,aE_e,sE,eps(2),Kt(2),nut(2),dnutdy(2),dUdy(2),deta,sigmae(2),dsigmaedy(2),upeps(1),upeps(3), &
+    call E_coefficients(aE_w,aE_e,sE,eps(2),Kt(2),nut(2),dnutdy(2),dUdy(2),deta,sigmae(2),dsigmaedy(2),upeps(2),duepsdy(2), &
         Ce1,f1,Ce2,f2, d2etady2(2), detady(2))
     A(2) = aE_e
     C_apex(2) = sE + aE_w * eps(1)
     do j =3,ny-1
-        call E_coefficients(aE_w,aE_e,sE,eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),upeps(j-1),upeps(j+1), &
+        call E_coefficients(aE_w,aE_e,sE,eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),upeps(j),duepsdy(j), &
             Ce1,f1,Ce2,f2,d2etady2(j), detady(j))
         denominator = ( 1.d0 - aE_w * A(j-1) )
         A(j) = aE_e / denominator
         C_apex(j) = ( aE_w * C_apex(j-1) + sE ) / denominator
     enddo
-    !call E_coefficients(aE_w,aE_e,sE,eps(ny),Kt(ny),nut(ny),dnutdy(ny),dUdy(ny),deta,sigmae(ny),dsigmaedy(ny),upeps(ny-1),upeps(ny+1), &
+    !call E_coefficients(aE_w,aE_e,sE,eps(ny),Kt(ny),nut(ny),dnutdy(ny),dUdy(ny),deta,sigmae(ny),dsigmaedy(ny),upeps(ny),duepsdy(ny), &
     !   Ce1,f1,Ce2,f2,d2etady2(ny), detady(ny))
     !denominator = ( 1.d0 - aE_w * A(ny-1) )
     A(ny-1) = 0.d0
     eps(ny) = 0.d0
     
     do j =2,ny-1
-        call E_coefficients(aE_w,aE_e,sE,eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),upeps(j-1),upeps(j+1), &
+        call E_coefficients(aE_w,aE_e,sE,eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),upeps(j),duepsdy(j), &
             Ce1,f1,Ce2,f2,d2etady2(j), detady(j))
         !if(j==2 .OR. j==ny-1) then
         !    print*, eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),Pieps(j),d2etady2(j), detady(j)
@@ -1182,3 +1200,34 @@ subroutine  linear_variable_smoother(phi_hat,phi,y,ny)
 
     end
 
+!!!*************************************************
+!!!*						         	           *
+!!!*           Positive part                    *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  positive_part(up,u)
+    implicit none
+    real*8, intent(in) :: u
+    real*8, intent(out) :: up
+    integer j
+
+    up = ( u + dabs(u) ) / 2.d0
+    
+    end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*           Negative part                    *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  negative_part(un,u)
+    implicit none
+    real*8, intent(in) :: u
+    real*8, intent(out) :: un
+    integer j
+
+    un = ( u - dabs(u) ) / 2.d0
+    
+    end
