@@ -18,6 +18,7 @@ Program main_K_epsilon
     real*8, allocatable :: dTdy(:),d2Tdy2(:),dTh2dy(:),d2Th2dy2(:)
     real*8, allocatable :: q_lam(:),q_R(:),q_new(:),P_Th2(:),eps_Th2(:),T_Th2(:),D_Th2(:),H_Th2(:)
     real*8, allocatable :: dsigmakdy(:),dsigmaedy(:),eps_hat(:),Pi_K(:),Pi_eps(:)
+    real*8, allocatable :: up_k(:),up_eps(:)
     integer j,ny,nhy,iter,niter
     real*8 Re_tau,Pr,Bp,Cp,Dp,Ep,dy_min,Cmu,Ce1,Ce2,f1,f2,alphaU,alphaKt,alphaeps
     real*8 resU,resK,resE,resT,resTh2,deta,aU_w,aU_e,sU,aK_w,aK_e,sK,aE_w,aE_e,sE, conv_fac
@@ -59,6 +60,7 @@ Program main_K_epsilon
     allocate(q_lam(1:ny),q_R(1:ny),q_new(1:ny),P_Th2(1:ny),eps_Th2(1:ny),T_Th2(1:ny),D_Th2(1:ny),H_Th2(1:ny))
     allocate(dsigmakdy(1:ny),dsigmaedy(1:ny),Pik(1:ny),Pieps(1:ny),eps_hat(1:ny))
     allocate(Pi_K(1:ny),Pi_eps(1:ny))
+    allocate(up_eps(1:ny),up_k(1:ny))
 
     call initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,eps,T,Th2,deta)
 
@@ -105,13 +107,13 @@ Program main_K_epsilon
         U_max = maxval(U, dim=1, mask=(U>0))
 
         call solve_u(U,nut,dnutdy,detady,d2etady2,deta,Re_tau,ny)    
-        call solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny)  
+        call solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny,up_k)  
         !do j=1,10
         !    print*, ' j= ',j,'; U(j) = ',U(j),'; Kt(j) = ',Kt(j),'; eps(j) = ',eps(j)
             !print*, ' j= ',j,'; nut(j) = ',nut(j),'; dnutdy(j) = ',dnutdy(j),'; sigmak(j) = ',sigmak(j),'; dsigmakdy(j) = ', &
             !dsigmakdy(j),'; sigmae(j) = ',sigmae(j),'; dsigmaedy(j) = ',dsigmaedy(j)
         !enddo  
-        call solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmaedy,eps_hat,ce1,ce2,f1,f2,ny)
+        call solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmaedy,eps_hat,ce1,ce2,f1,f2,ny,up_eps)
         call solve_T(T,nut,dnutdy,lambda,dlambdadT,d2lambdadT2,dTh2dy,d2Th2dy2,dTdy,Pr,sigmaT,deta,d2etady2,detady,ny)
         call solve_Th2(Th2,nut,dnutdy,lambda,dlambdadT,d2lambdadT2,dTdy,d2Tdy2,Pr,sigmaTh2,deta,d2etady2,detady,eps,Kt,ny)
 
@@ -180,6 +182,13 @@ Program main_K_epsilon
        ',',D_Th2(j),',',H_Th2(j),',',lambda(j)
     enddo
     close(15)
+
+    open(16,file='Up.csv',form='formatted')
+    write(16,*) '"y","up_k","up_eps","eps_hat"'
+    do j=1,ny
+       write(16,101) y(j),',',up_k(j),',',up_eps(j),',',eps_hat(j)
+    enddo
+    close(16)
 
     101 format(e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10,A,e18.10, &
     A,e18.10,A,e18.10,A,e18.10,A,e18.10)
@@ -933,14 +942,15 @@ subroutine  solve_u(U,nut,dnutdy,detady,d2etady2,deta,Re_tau,ny)
 !!!*								               *
 !!!*************************************************
     
-subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny)
+subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny,upk)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: eps(1:ny),dUdy(1:ny),nut(1:ny),dnutdy(1:ny),detady(1:ny),d2etady2(1:ny),deta,sigmak(1:ny)
     real*8, intent(in) :: dsigmakdy(1:ny),eps_hat(1:ny)
     real*8, intent(inout) :: Kt(1:ny)
+    real*8, INTENT(OUT) :: upk(1:ny)
     real*8 aK_w,aK_e,sK
-    real*8 A(1:ny),C_apex(1:ny),denominator,deps_hatdeta(1:ny),upk(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
+    real*8 A(1:ny),C_apex(1:ny),denominator,deps_hatdeta(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
     integer j
 
     call ddeta(ny,eps_hat,deps_hatdeta,deta)
@@ -1003,14 +1013,15 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
 !!!*								               *
 !!!*************************************************
     
-subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmaedy,eps_hat,ce1,ce2,f1,f2,ny)
+subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmaedy,eps_hat,ce1,ce2,f1,f2,ny,upeps)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: Kt(1:ny),dUdy(1:ny),nut(1:ny),dnutdy(1:ny),detady(1:ny),d2etady2(1:ny),deta,sigmae(1:ny)
     real*8, intent(in) :: ce1,ce2,f1,f2,dsigmaedy(1:ny),eps_hat(1:ny)
     real*8, intent(inout) :: eps(1:ny)
+    real*8, intent(out) :: upeps(1:ny)
     real*8 aE_w,aE_e,sE
-    real*8 A(1:ny),C_apex(1:ny),denominator,dKtdeta(1:ny),upeps(1:ny),duepsdy(1:ny),d2Ktdeta2(1:ny)
+    real*8 A(1:ny),C_apex(1:ny),denominator,dKtdeta(1:ny),duepsdy(1:ny),d2Ktdeta2(1:ny)
     integer j
 
     call ddeta(ny,Kt,dKtdeta,deta)
