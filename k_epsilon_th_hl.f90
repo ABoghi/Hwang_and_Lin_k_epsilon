@@ -988,7 +988,7 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
     call ddeta(ny,eps,depsdeta,deta)
     call d2deta2(ny,eps_hat,d2eps_hatdeta2,deta)
 
-    upk = 0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
+    upk = 0*0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
 
     dupkdy = ( 0.5d0 / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
     - 0.5d0 * ( depsdeta + deps_hatdeta ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)**2.d0
@@ -1054,7 +1054,7 @@ subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmae
     call ddeta(ny,Kt,dKtdeta,deta)
     call d2deta2(ny,Kt,d2Ktdeta2,deta)
 
-    upeps = dKtdeta * detady / Kt
+    upeps = 0*dKtdeta * detady / Kt
     !!! wall correction
     upeps(1) = 2.d0*upeps(2)
     upeps(ny) = 2.d0*upeps(ny-1)
