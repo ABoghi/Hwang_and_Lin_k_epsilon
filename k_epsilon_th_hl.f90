@@ -9,7 +9,7 @@
     
 Program main_K_epsilon
     implicit none
-    real*8, allocatable :: y(:),U(:),kt(:),eps(:),detady(:),d2etady2(:)
+    real*8, allocatable :: y(:),U(:),kt(:),eps(:),detady(:),d2etady2(:),d3etady3(:)
     real*8, allocatable :: U0(:),kt0(:),eps0(:)
     real*8, allocatable :: nut(:),dnutdy(:),dUdy(:)
     real*8, allocatable :: tau_mu(:),tau_R(:),Pk(:),Tk(:),Dk(:),Pik(:),Pieps(:),sigmak(:),sigmae(:)
@@ -58,9 +58,9 @@ Program main_K_epsilon
     allocate(dTdy(1:ny),d2Tdy2(1:ny),dTh2dy(1:ny),d2Th2dy2(1:ny),sigmak(1:ny),sigmae(1:ny))
     allocate(q_lam(1:ny),q_R(1:ny),q_new(1:ny),P_Th2(1:ny),eps_Th2(1:ny),T_Th2(1:ny),D_Th2(1:ny),H_Th2(1:ny))
     allocate(dsigmakdy(1:ny),dsigmaedy(1:ny),Pik(1:ny),Pieps(1:ny),eps_hat(1:ny))
-    allocate(Pi_K(1:ny),Pi_eps(1:ny),upkt(1:ny),upeps(1:ny))
+    allocate(Pi_K(1:ny),Pi_eps(1:ny),upkt(1:ny),upeps(1:ny),d3etady3(1:ny))
 
-    call initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,eps,T,Th2,deta)
+    call initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,d3etady3,U,Kt,eps,T,Th2,deta)
 
     call hwang_lin_k_epsilon_constants(Ce1,Ce2,Cmu,f1,f2)
 
@@ -105,7 +105,7 @@ Program main_K_epsilon
         U_max = maxval(U, dim=1, mask=(U>0))
 
         call solve_u(U,nut,dnutdy,detady,d2etady2,deta,Re_tau,ny)    
-        call solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny,upkt)  
+        call solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak,dsigmakdy,eps_hat,ny,upkt)  
         !do j=1,10
         !    print*, ' j= ',j,'; U(j) = ',U(j),'; Kt(j) = ',Kt(j),'; eps(j) = ',eps(j)
             !print*, ' j= ',j,'; nut(j) = ',nut(j),'; dnutdy(j) = ',dnutdy(j),'; sigmak(j) = ',sigmak(j),'; dsigmakdy(j) = ', &
@@ -197,12 +197,13 @@ Program main_K_epsilon
 !!!*								                 *
 !!!*************************************************
 
-subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,eps,T,Th2,deta)
+subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,d3etady3,U,Kt,eps,T,Th2,deta)
     implicit none
     logical, intent(in) :: flag
     integer, intent(in) :: ny
     real*8, intent(in) :: Re_tau,dy_min,Pr,Bp,Cp
-    real*8, intent(out) :: y(1:ny),detady(1:ny),d2etady2(1:ny),U(1:ny),kt(1:ny),T(1:ny),Th2(1:ny),eps(1:ny),deta
+    real*8, intent(out) :: y(1:ny),detady(1:ny),d2etady2(1:ny),d3etady3(1:ny),U(1:ny)
+    real*8, intent(out) :: kt(1:ny),T(1:ny),Th2(1:ny),eps(1:ny),deta
     integer j
     real*8 Kappa, Cmu,Ce1,Ce2,nut(1:ny),f2(1:ny),y_mid,dUdeta(1:ny),dUdy(1:ny),uk(1:ny),dukdeta(1:ny)
 
@@ -233,7 +234,7 @@ subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,U,Kt,
   
         print *,'new run'
 
-        call grid(ny,dy_min,Re_tau,y,detady,d2etady2,deta)
+        call grid(ny,dy_min,Re_tau,y,detady,d2etady2,d3etady3,deta)
 
         do j=1,ny/2
             if(y(j)<=y_mid) then
@@ -496,14 +497,14 @@ subroutine  u_coefficients(aU_w,aU_e,sU,nut,dnutdy,deta,Re_tau,d2etady2,detady)
 !!!*                K coefficients	       	   *
 !!!*								                   *
 !!!***************************************************
-subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakdy,Uw,Up,Ue,eps_hat,d2etady2,detady)
+subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,nup,dnupdy,dUdy,deta,sigmak,dsigmakdy,Uw,Up,Ue,eps_hat,d2etady2,detady)
     implicit none
-    real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Uw,Up,Ue,eps_hat
+    real*8, intent(in) :: eps,nut,dnutdy,nup,dnupdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Uw,Up,Ue,eps_hat
     real*8, intent(out) :: aK_w,aK_e,sK
     real*8 diff, conv, b_w, b_e, b_p, D_w, D_e, F_w, F_e, F_p
 
-    diff = (1.d0+nut/sigmak)*(1.d0/deta**2.d0)*detady**2.d0
-    conv = (1.d0/(2.d0*sigmak))*( (sigmak+nut)*d2etady2 + detady*(dnutdy -(nut/sigmak)*dsigmakdy) )/deta
+    diff = (1.d0+nut/sigmak+nup)*(1.d0/deta**2.d0)*detady**2.d0
+    conv = (1.d0/(2.d0*sigmak))*( (sigmak+nut+sigmak*nup)*d2etady2 + detady*(dnutdy -(nut/sigmak)*dsigmakdy +dnupdy) )/deta
     D_w = diff - conv
     D_e = diff + conv
     F_w = Uw*detady/deta
@@ -514,21 +515,21 @@ subroutine  K_coefficients(aK_w,aK_e,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakd
     b_e = D_e - F_e/2.d0 
     b_p = D_w + D_e
 
-    if ( (b_e < 0.d0) .and. (b_w >= 0.d0) ) then
-        !print*, '(b_e < 0.d0) .and. (b_w >= 0.d0)'
-        b_e = D_e
-        b_w = D_w + F_w
-        b_p = D_e + D_w + F_p
-    else if( (b_w < 0.d0) .and. (b_e >= 0.d0) ) then
-        !print*, '(b_w < 0.d0) .and. (b_e >= 0.d0)'
-        b_w = D_w
-        b_e = D_e - F_e
-        b_p = D_w + D_e - F_p
-    else if( (b_w < 0.d0) .and. (b_e < 0.d0) ) then
-        b_w = D_w + F_p/2.d0
-        b_e = D_e - F_p/2.d0  
-        b_p = D_w + D_e +(F_e - F_w)/2.d0
-    endif
+    !if ( (b_e < 0.d0) .and. (b_w >= 0.d0) ) then
+    !    !print*, '(b_e < 0.d0) .and. (b_w >= 0.d0)'
+    !    b_e = D_e
+    !    b_w = D_w + F_w
+    !    b_p = D_e + D_w + F_p
+    !else if( (b_w < 0.d0) .and. (b_e >= 0.d0) ) then
+    !    !print*, '(b_w < 0.d0) .and. (b_e >= 0.d0)'
+    !    b_w = D_w
+    !    b_e = D_e - F_e
+    !    b_p = D_w + D_e - F_p
+    !else if( (b_w < 0.d0) .and. (b_e < 0.d0) ) then
+    !    b_w = D_w + F_p/2.d0
+    !    b_e = D_e - F_p/2.d0  
+    !    b_p = D_w + D_e +(F_e - F_w)/2.d0
+    !endif
 
     !b_w = max(max(D_w + F_w/2.d0,F_w),0.d0)
     !b_e = max(max(D_e - F_e/2.d0,-F_e),0.d0) 
@@ -564,21 +565,21 @@ subroutine  E_coefficients(aE_w,aE_e,sE,eps,Kt,nut,dnutdy,dUdy,deta,sigmae,dsigm
     b_e = D_e - F_e/2.d0  
     b_p = D_w + D_e
 
-    if ( (b_e < 0.d0) .and. (b_w >= 0.d0) ) then
-        !print*, '(b_e < 0.d0) .and. (b_w >= 0.d0)'
-        b_e = D_e
-        b_w = D_w + F_w
-        b_p = D_e + D_w + F_p
-    else if( (b_w < 0.d0) .and. (b_e >= 0.d0) ) then
-        !print*, '(b_w < 0.d0) .and. (b_e >= 0.d0)'
-        b_w = D_w
-        b_e = D_e - F_e
-        b_p = D_w + D_e - F_p
-    else if( (b_w < 0.d0) .and. (b_e < 0.d0) ) then
-        b_w = D_w + F_p/2.d0
-        b_e = D_e - F_p/2.d0  
-        b_p = D_w + D_e +(F_e - F_w)/2.d0
-    endif
+    !if ( (b_e < 0.d0) .and. (b_w >= 0.d0) ) then
+    !    !print*, '(b_e < 0.d0) .and. (b_w >= 0.d0)'
+    !    b_e = D_e
+    !    b_w = D_w + F_w
+    !    b_p = D_e + D_w + F_p
+    !else if( (b_w < 0.d0) .and. (b_e >= 0.d0) ) then
+    !    !print*, '(b_w < 0.d0) .and. (b_e >= 0.d0)'
+    !    b_w = D_w
+    !    b_e = D_e - F_e
+    !    b_p = D_w + D_e - F_p
+    !else if( (b_w < 0.d0) .and. (b_e < 0.d0) ) then
+    !    b_w = D_w + F_p/2.d0
+    !    b_e = D_e - F_p/2.d0  
+    !    b_p = D_w + D_e +(F_e - F_w)/2.d0
+    !endif
 
     !b_w = max(max(D_w + F_w/2.d0,F_w),0.d0)
     !b_e = max(max(D_e - F_e/2.d0,-F_e),0.d0) 
@@ -815,11 +816,11 @@ subroutine  residuals(ny,A,A0,resA)
 !!!*								                 *
 !!!*************************************************
 
-subroutine grid(ny,dy_min,Re_tau,y,detady,d2etady2,deta)
+subroutine grid(ny,dy_min,Re_tau,y,detady,d2etady2,d3etady3,deta)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: Re_tau,dy_min
-    real*8, intent(out) :: y(1:ny),detady(1:ny),d2etady2(1:ny),deta
+    real*8, intent(out) :: y(1:ny),detady(1:ny),d2etady2(1:ny),d3etady3(1:ny),deta
     integer j
     real*8 a, b, c, d, e, eta, y_max
 
@@ -835,6 +836,7 @@ subroutine grid(ny,dy_min,Re_tau,y,detady,d2etady2,deta)
         y(j) = a*eta**2.d0 + b*eta
         detady(j) = 1.d0/(2.d0*a*eta + b)
         d2etady2(j) = -2.d0*a/(2.d0*a*eta + b)**3.d0
+        d3etady3(j) = ( 12.d0*a**2.d0 ) / (2.d0*a*eta +b)**5.d0
     enddo
 
     c = -a
@@ -846,6 +848,7 @@ subroutine grid(ny,dy_min,Re_tau,y,detady,d2etady2,deta)
         y(j) = c*eta**2.d0 + d*eta + e
         detady(j) = 1.d0/(2.d0*c*eta + d)
         d2etady2(j) = -2.d0*c/(2.d0*c*eta + d)**3.d0
+        d3etady3(j) = ( 12.d0*c**2.d0 ) / (2.d0*c*eta +d)**5.d0
     enddo
 
     print*, ' dy_max =', y(ny/2)-y(ny/2-1), ' dy_min =', y(2)-y(1), ' ratio =', (y(ny/2)-y(ny/2-1))/(y(2)-y(1))
@@ -975,16 +978,28 @@ subroutine  solve_u(U,nut,dnutdy,detady,d2etady2,deta,Re_tau,ny)
 !!!*								               *
 !!!*************************************************
     
-subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakdy,eps_hat,ny,upk)
+subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak,dsigmakdy,eps_hat,ny,upk)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: eps(1:ny),dUdy(1:ny),nut(1:ny),dnutdy(1:ny),detady(1:ny),d2etady2(1:ny),deta,sigmak(1:ny)
-    real*8, intent(in) :: dsigmakdy(1:ny),eps_hat(1:ny)
+    real*8, intent(in) :: dsigmakdy(1:ny),eps_hat(1:ny),d3etady3(1:ny)
     real*8, intent(inout) :: Kt(1:ny)
     real*8, intent(out) :: upk(1:ny)
     real*8 aK_w,aK_e,sK
     real*8 deps_hatdeta(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
+    real*8 nup(1:ny),d2Ktdeta2(1:ny),dKtdeta(1:ny),dnupdeta(1:ny),dnupdy(1:ny)
+    real*8 depsdy(1:ny)
     integer j
+
+    call d2deta2(ny,Kt,d2Ktdeta2,deta)
+    call ddeta(ny,Kt,dKtdeta,deta)
+
+    nup = 0*( eps_hat - ( d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2 ) ) / ( 2.d0 * ( eps + eps_hat ) )
+
+    call ddeta(ny,nup,dnupdeta,deta)
+    call ddeta(ny,Kt,depsdeta,deta)
+
+    dnupdy = - nup * ( depsdeta * detady / eps + dKtdeta * detady / Kt )
 
     call ddeta(ny,eps_hat,deps_hatdeta,deta)
     call ddeta(ny,eps,depsdeta,deta)
@@ -995,6 +1010,9 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
 
     !!! This is the problem
     upk = 0*0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
+    !upk = dKtdeta * detady * ( (d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2) - eps_hat ) / ( 2.d0 * Kt * (eps + eps_hat))
+    upk(1) = 2.d0*upk(2)
+    upk(ny) = 2.d0*upk(ny-1)
 
     !dupkdy = ( 0.5d0 / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
     !- 0.5d0 * ( depsdeta + deps_hatdeta ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)**2.d0
@@ -1003,8 +1021,8 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmak,dsigmakd
 
     Kt(1) = 0.d0
     do j =2,ny-1
-        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j),upk(j-1),upk(j), &
-            upk(j+1), eps_hat(j), d2etady2(j),detady(j))
+        call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),nup(j),dnupdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j), &
+            upk(j-1),upk(j), upk(j+1), eps_hat(j), d2etady2(j),detady(j))
         if (aK_e < 0.d0) then
             print*, "aK_e=",aK_e, " j=",j
         endif
@@ -1041,6 +1059,8 @@ subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmae
     !!! wall correction
     upeps(1) = (5.d0*upeps(2) -4.d0*upeps(3) +upeps(4))/2.d0
     upeps(ny) = (5.d0*upeps(ny-1) -4.d0*upeps(ny-2) +upeps(ny-3))/2.d0
+    upeps(1) = 2.d0*upeps(2) 
+    upeps(ny) = 2.d0*upeps(ny-1)
 
     !duepsdy = (1.d0 / Kt) * ( d2Ktdeta2 * ( detady )**2.d0 + dKtdeta * d2etady2 ) &
     !- ( dKtdeta * detady / Kt ) **2.d0
