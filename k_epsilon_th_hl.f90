@@ -379,6 +379,27 @@ subroutine  d3deta3(ny,A,D3A,deta)
     
     end
 
+!!!*************************************************
+!!!*						         	             *
+!!!*                    d3dy3                        *
+!!!*								                 *
+!!!*************************************************
+
+subroutine  d3dy3(ny,A,D3ADY3,detady,d2etady2,d3etady3,deta)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: A(1:ny),detady(1:ny),d2etady2(1:ny),d3etady3(1:ny),deta
+    real*8, intent(out) :: D3ADY3(1:ny)
+    real*8 DADeta(1:ny),D2ADeta2(1:ny),D3ADeta3(1:ny)
+    
+    call ddeta(ny,A,DADeta,deta)
+    call d2deta2(ny,A,D2ADeta2,deta)
+    call d3deta3(ny,A,D3ADeta3,deta)
+
+    D3ADY3 = D3ADeta3 * (detady)**3.d0 + 3.d0 * D2ADeta2 * detady * d2etady2 + DADeta * d3etady3
+    
+    end
+
 !!!***************************************************
 !!!*						         	               *
 !!!*       Hwand and Lin K - Epsilon Constants 	       	   *
