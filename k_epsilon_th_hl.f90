@@ -269,7 +269,9 @@ subroutine initialization(flag,ny,Re_tau,Pr,Bp,Cp,dy_min,y,detady,d2etady2,d3eta
         call linear_variable_smoother(eps,eps,y,ny)
         call linear_variable_smoother(Kt,Kt,y,ny)
         call linear_variable_smoother(U,U,y,ny)
-
+        call linear_variable_smoother(eps,eps,y,ny)
+        call linear_variable_smoother(Kt,Kt,y,ny)
+        call linear_variable_smoother(U,U,y,ny)
         !!! Hwang and Lin correction
         uk = dsqrt(dabs(Kt))
         call ddeta(ny,uk,dukdeta,deta)
@@ -343,13 +345,13 @@ subroutine  d2deta2(ny,A,D2A,deta)
 
     deta2 = deta*deta
     
-    D2A(1) =  (12.d0*a(1) -30.d0*a(2) +24.d0*a(3) -6.d0*a(4))/(6.d0*deta2)
+    D2A(1) =  (2.d0*a(1) -5.d0*a(2) +4.d0*a(3) -a(4))/deta2
     
     do j=2,ny-1
         D2A(j) = (a(j+1) - 2.d0*a(j) + a(j-1))/deta2
     enddo
     
-    D2A(ny) = (12.d0*a(ny) -30.d0*a(ny-1) +24.d0*a(ny-2) -6.d0*a(ny-3))/(6.d0*deta2)
+    D2A(ny) = (2.d0*a(ny) -5.d0*a(ny-1) +4.d0*a(ny-2) -a(ny-3))/deta2
     
     end
 
@@ -469,7 +471,7 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,ny,y,kt,eps,
     real*8, intent(in) :: y(1:ny),Kt(1:ny),eps(1:ny),detady(1:ny),d2etady2(1:ny),Cmu,deta
     real*8, intent(out) :: nut(1:ny),sigmak(1:ny),sigmae(1:ny),eps_hat(1:ny)
     real*8 y_lambda(1:ny), fmu(1:ny), uk(1:ny), dukdeta(1:ny),dukdy(1:ny)
-    real*8 Kt_min,eps_min
+    real*8 Kt_min,eps_min, dKtdy(1:ny), d2Ktdy2(1:ny)
     integer j
 
     Kt_min = 1.d-60
@@ -520,7 +522,18 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,ny,y,kt,eps,
     call ddeta(ny,uk,dukdeta,deta)
     dukdy = dukdeta*detady
 
-    eps_hat = 2.d0 * (dukdy)**2.d0
+    call ddy(ny,Kt,dKtdy,detady,deta)
+    call d2dy2(ny,Kt,d2Ktdy2,detady,d2etady2,deta)
+
+    do j=1,ny
+        if(Kt(j) /= 0.d0) then
+            eps_hat(j) = (1.d0/(2.d0*Kt(j)))*(dKtdy(j))**2.d0
+        else
+            eps_hat(j) = d2Ktdy2(j)
+        endif
+    enddo
+
+    !eps_hat = 2.d0 * (dukdy)**2.d0
 
     end
 
@@ -1074,18 +1087,20 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak
     real*8 aK_w,aK_e,sK
     real*8 deps_hatdeta(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
     real*8 nup(1:ny),d2Ktdeta2(1:ny),dKtdeta(1:ny),dnupdeta(1:ny),dnupdy(1:ny)
-    real*8 depsdy(1:ny)
+    real*8 depsdy(1:ny),D3KtDY3(1:ny)
     integer j
 
     call d2deta2(ny,Kt,d2Ktdeta2,deta)
     call ddeta(ny,Kt,dKtdeta,deta)
 
-    nup = 0*( eps_hat - ( d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2 ) ) / ( 2.d0 * ( eps + eps_hat ) )
+    nup = ( eps_hat - ( d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2 ) ) / ( 2.d0 * ( eps + eps_hat ) )
 
     call ddeta(ny,nup,dnupdeta,deta)
     call ddeta(ny,Kt,depsdeta,deta)
 
-    dnupdy = - nup * ( depsdeta * detady / eps + dKtdeta * detady / Kt )
+    call d3dy3(ny,Kt,D3KtDY3,detady,d2etady2,d3etady3,deta)
+
+    dnupdy = - 0*nup * ( depsdeta * detady / eps + dKtdeta * detady / Kt ) - 0*d3Ktdy3 / ( 2.d0 * ( eps + eps_hat ) )
 
     call ddeta(ny,eps_hat,deps_hatdeta,deta)
     call ddeta(ny,eps,depsdeta,deta)
@@ -1118,6 +1133,8 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak
         Kt(j) = sK + aK_e*Kt(j+1) + aK_w*Kt(j-1)
     enddo
     Kt(ny) = 0.d0
+
+    !upk = detady
 
     end
 
