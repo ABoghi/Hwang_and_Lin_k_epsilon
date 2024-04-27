@@ -353,6 +353,32 @@ subroutine  d2deta2(ny,A,D2A,deta)
     
     end
 
+!!!*************************************************
+!!!*						         	             *
+!!!*                    d3deta3                        *
+!!!*								                 *
+!!!*************************************************
+
+subroutine  d3deta3(ny,A,D3A,deta)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: A(1:ny),deta
+    real*8, intent(out) :: D3A(1:ny)
+    real*8 deta3
+    integer j
+
+    deta3 = deta**3.d0
+    
+    D3A(1) = (-3.d0*a(5) + 14.d0*a(4) - 24.d0*a(3) + 18.d0*a(2) - 5.d0*a(1))/(2.d0*deta3)
+    D3A(2) = (-a(5) + 6.d0*a(4) - 12.d0*a(3) + 10.d0*a(2) - 3.d0*a(1))/(2.d0*deta3)
+    do j=3,ny-2
+        D3A(j) = (a(j+2) - 2.d0*a(j+1) + 2.d0*a(j-1) - a(j-2))/(2.d0*deta3)
+    enddo
+    D3A(ny-1) = (a(ny-4) - 6.d0*a(ny-3) + 12.d0*a(ny-2) - 10.d0*a(ny-1) + 3.d0*a(ny))/(2.d0*deta3)
+    D3A(ny) = (3.d0*a(ny-4) - 14.d0*a(ny-3) + 24.d0*a(ny-2) - 18.d0*a(ny-1) + 5.d0*a(ny))/(2.d0*deta3)
+    
+    end
+
 !!!***************************************************
 !!!*						         	               *
 !!!*       Hwand and Lin K - Epsilon Constants 	       	   *
