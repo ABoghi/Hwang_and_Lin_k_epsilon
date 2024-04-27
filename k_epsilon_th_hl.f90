@@ -381,6 +381,45 @@ subroutine  d3deta3(ny,A,D3A,deta)
 
 !!!*************************************************
 !!!*						         	             *
+!!!*                    ddy                        *
+!!!*								                 *
+!!!*************************************************
+
+subroutine  ddy(ny,A,DADY,detady,deta)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: A(1:ny),detady(1:ny),deta
+    real*8, intent(out) :: DADY(1:ny)
+    real*8 DADeta(1:ny)
+    
+    call ddeta(ny,A,DADeta,deta)
+
+    DADY = DADeta * detady
+    
+    end
+
+!!!*************************************************
+!!!*						         	             *
+!!!*                    d2dy2                        *
+!!!*								                 *
+!!!*************************************************
+
+subroutine  d2dy2(ny,A,D2ADY2,detady,d2etady2,deta)
+    implicit none
+    integer, intent(in) :: ny
+    real*8, intent(in) :: A(1:ny),detady(1:ny),d2etady2(1:ny),deta
+    real*8, intent(out) :: D2ADY2(1:ny)
+    real*8 DADeta(1:ny),D2ADeta2(1:ny)
+    
+    call ddeta(ny,A,DADeta,deta)
+    call d2deta2(ny,A,D2ADeta2,deta)
+
+    D2ADY2 = D2ADeta2 * (detady)**2.d0 + DADeta * d2etady2
+    
+    end
+
+!!!*************************************************
+!!!*						         	             *
 !!!*                    d3dy3                        *
 !!!*								                 *
 !!!*************************************************
