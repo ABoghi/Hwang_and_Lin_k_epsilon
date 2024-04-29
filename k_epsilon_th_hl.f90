@@ -525,13 +525,15 @@ subroutine  hwang_lin_k_epsilon_functions(nut,sigmak,sigmae,eps_hat,ny,y,kt,eps,
     call ddy(ny,Kt,dKtdy,detady,deta)
     call d2dy2(ny,Kt,d2Ktdy2,detady,d2etady2,deta)
 
-    do j=1,ny
+    eps_hat(1) = d2Ktdy2(1) ! 2.d0 * (dukdy(1))**2.d0 !
+    do j=2,ny-1
         if(Kt(j) /= 0.d0) then
             eps_hat(j) = (1.d0/(2.d0*Kt(j)))*(dKtdy(j))**2.d0
         else
             eps_hat(j) = d2Ktdy2(j)
         endif
     enddo
+    eps_hat(ny) = d2Ktdy2(ny) ! 2.d0 * (dukdy(ny))**2.d0 !
 
     !eps_hat = 2.d0 * (dukdy)**2.d0
 
@@ -1086,55 +1088,52 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak
     real*8, intent(out) :: upk(1:ny)
     real*8 aK_w,aK_e,sK
     real*8 deps_hatdeta(1:ny), dupkdy(1:ny), depsdeta(1:ny),d2eps_hatdeta2(1:ny)
-    real*8 nup(1:ny),d2Ktdeta2(1:ny),dKtdeta(1:ny),dnupdeta(1:ny),dnupdy(1:ny)
-    real*8 depsdy(1:ny),D3KtDY3(1:ny)
+    real*8 nup(1:ny),d2Ktdeta2(1:ny),dKtdeta(1:ny),dnupdy(1:ny)
+    real*8 depsdy(1:ny),D3KtDY3(1:ny),D2KtDY2(1:ny),dKtdy(1:ny)
     integer j
 
     call d2deta2(ny,Kt,d2Ktdeta2,deta)
     call ddeta(ny,Kt,dKtdeta,deta)
-
-    nup = ( eps_hat - ( d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2 ) ) / ( 2.d0 * ( eps + eps_hat ) )
-
-    call ddeta(ny,nup,dnupdeta,deta)
-    call ddeta(ny,Kt,depsdeta,deta)
-
+    call d2dy2(ny,Kt,d2Ktdy2,detady,d2etady2,deta)
     call d3dy3(ny,Kt,D3KtDY3,detady,d2etady2,d3etady3,deta)
-
-    dnupdy = - 0*nup * ( depsdeta * detady / eps + dKtdeta * detady / Kt ) - 0*d3Ktdy3 / ( 2.d0 * ( eps + eps_hat ) )
-
-    call ddeta(ny,eps_hat,deps_hatdeta,deta)
     call ddeta(ny,eps,depsdeta,deta)
+    call ddeta(ny,eps_hat,deps_hatdeta,deta)
     call d2deta2(ny,eps_hat,d2eps_hatdeta2,deta)
+    call ddy(ny,Kt,dKtdy,detady,deta)
+    call ddy(ny,eps,depsdy,detady,deta)
 
-    !uk(j)= dsqrt(dabs(Kt(j)))
-    !eps_hat = 2.d0 * (dukdy)**2.d0
+    nup = ( eps_hat - d2Ktdy2 ) / ( 2.d0 * ( eps + eps_hat ) )
+    
+    dnupdy = - nup * ( depsdy / ( eps + eps_hat ) + 0*(1.d0 - 2.d0 *nup ) * dKtdy / Kt ) &
+    - 0*d3Ktdy3 / ( 2.d0 * ( eps + eps_hat ) )
+    !print*, 'nup(1) = ',nup(1),'; nup(ny) = ',nup(ny)
+    !print*, 'nup(2) = ',nup(2),'; nup(ny-1) = ',nup(ny-1),'; dnupdy(2) = ',dnupdy(2),'; dnupdy(ny-1) = ',dnupdy(ny-1)
+
+    dnupdy(1) = 0.d0
+    dnupdy(ny) = 0.d0
+    !call linear_variable_smoother(dnupdy,dnupdy,0.d0*dnupdy,ny)
 
     !!! This is the problem
-    upk = 0*0.5d0 * deps_hatdeta * detady / ( eps + eps_hat)
-    !upk = dKtdeta * detady * ( (d2Ktdeta2*detady**2.d0 + dKtdeta*d2etady2) - eps_hat ) / ( 2.d0 * Kt * (eps + eps_hat))
+    upk = dKtdy * ( d2Ktdy2 - eps_hat ) / ( 2.d0 * Kt * (eps + eps_hat))
     upk(1) = 2.d0*upk(2)
     upk(ny) = 2.d0*upk(ny-1)
-
-    !dupkdy = ( 0.5d0 / ( eps + eps_hat) ) * ( d2eps_hatdeta2 * ( detady )**2.d0 + deps_hatdeta * d2etady2 ) &
-    !- 0.5d0 * ( depsdeta + deps_hatdeta ) * deps_hatdeta * ( detady**2.d0 ) / ( eps + eps_hat)**2.d0
-    !upk = upk
-    !dupkdy = 0.d0*dupkdy
+    upk = 0.d0
 
     Kt(1) = 0.d0
     do j =2,ny-1
         call K_coefficients(aK_w,aK_e,sK,eps(j),nut(j),dnutdy(j),nup(j),dnupdy(j),dUdy(j),deta,sigmak(j),dsigmakdy(j), &
             upk(j-1),upk(j), upk(j+1), eps_hat(j), d2etady2(j),detady(j))
-        if (aK_e < 0.d0) then
-            print*, "aK_e=",aK_e, " j=",j
-        endif
-        if (aK_w < 0.d0) then
-            print*, "aK_w=",aK_w, " j=",j
-        endif
+        !if (aK_e < 0.d0) then
+        !    print*, "aK_e=",aK_e, " j=",j
+        !endif
+        !if (aK_w < 0.d0) then
+        !    print*, "aK_w=",aK_w, " j=",j
+        !endif
         Kt(j) = sK + aK_e*Kt(j+1) + aK_w*Kt(j-1)
     enddo
     Kt(ny) = 0.d0
 
-    !upk = detady
+    upk = d3Ktdy3
 
     end
 
@@ -1178,12 +1177,12 @@ subroutine  solve_eps(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,deta,sigmae,dsigmae
         !    print*, eps(j),Kt(j),nut(j),dnutdy(j),dUdy(j),deta,sigmae(j),dsigmaedy(j),Pieps(j),d2etady2(j), detady(j)
         !endif
         !PRINT*, ' j = ',j,'; sE = ',sE,'; aE_w = ',aE_w,',aE_e = ',aE_e
-        if (aE_e < 0.d0) then
-            print*, "aE_e=",aE_e, " j=",j
-        endif
-        if (aE_w < 0.d0) then
-            print*, "aE_w=",aE_w, " j=",j
-        endif
+        !if (aE_e < 0.d0) then
+        !    print*, "aE_e=",aE_e, " j=",j
+        !endif
+        !if (aE_w < 0.d0) then
+        !    print*, "aE_w=",aE_w, " j=",j
+        !endif
         eps(j) = sE + aE_e*eps(j+1) + aE_w*eps(j-1)
     enddo
     eps(ny) = 0.d0 
@@ -1336,10 +1335,12 @@ subroutine  linear_variable_smoother(phi_hat,phi,y,ny)
 
     phi_hat = phi
 
+    phi_hat(1) = 2.d0*phi(2) - phi(3)
     do j=2,ny-1
         !phi_hat(j) = ( phi(j-1) + 2.d0 * phi(j) + phi(j+1) ) / 4.d0
         phi_hat(j) = ( phi(j-1) + phi(j+1) ) / 2.d0
     enddo
+    phi_hat(ny) = 2.d0*phi(ny-1) - phi(ny-2)
     
 
     end
