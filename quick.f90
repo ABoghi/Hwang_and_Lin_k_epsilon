@@ -3,55 +3,59 @@
 !!!*                K coefficients	       	   *
 !!!*								                   *
 !!!***************************************************
-subroutine  K_coefficients(aK_ww,aK_w,aK_e,aK_ee,sK,eps,nut,dnutdy,nup,dnupdy,dUdy,deta,sigmak,dsigmakdy,Uww,Uw,Up,Ue,Uee,eps_hat, &
+subroutine  K_coefficients_2(aK_ww,aK_w,aK_e,aK_ee,sK,eps,nut,dnutdy,dUdy,deta,sigmak,dsigmakdy,Uww,Uw,Up,Ue,Uee,eps_hat, &
     d2etady2,detady)
     implicit none
-    real*8, intent(in) :: eps,nut,dnutdy,nup,dnupdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Uww,Uw,Up,Ue,Uee,eps_hat
+    real*8, intent(in) :: eps,nut,dnutdy,dUdy,deta,sigmak,d2etady2,detady,dsigmakdy,Uww,Uw,Up,Ue,Uee,eps_hat
     real*8, intent(out) :: aK_ww,aK_w,aK_e,aK_ee,sK
-    real*8 diff, conv, b_ww, b_w, b_e, b_ee, b_p, D_w, D_e, F_ww, F_w, F_e, F_ee, F_p
+    real*8 b_ww, b_w, b_e, b_ee, b_p, D_w, D_e, F_ww, F_w, F_e, F_ee, F_p
+    real*8 A_k,B_k,C_k,E_k,sigma_K, beta,gamma
 
     !DA_e(j) = (-2.d0*Uw*a(j-1) -3.d0*Up*a(j) + 6.d0*Ue*a(j+1) -Uee*a(j+2))/(6.d0*deta)
     !DA_w(j) = (Uww*a(j-2) - 6.d0*Uw*a(j-1) + 3.d0*Up*a(j) +2.d0*Ue*a(j+1))/(6.d0*deta)
 
-    diff = (1.d0+nut/sigmak+nup)*(1.d0/deta**2.d0)*detady**2.d0
-    conv = (1.d0/(2.d0*sigmak))*( (sigmak+nut+sigmak*nup)*d2etady2 + detady*(dnutdy -(nut/sigmak)*dsigmakdy +dnupdy) )/deta
-    D_w = diff - conv
-    D_e = diff + conv
-    F_ww = Uww*detady/deta
-    F_w = Uw*detady/deta
-    F_e = Ue*detady/deta
-    F_p = Up*detady/deta
-    F_ee = Uee*detady/deta
+    A_k = (1.d0+nut/sigmak)*detady**2.d0
+    B_k = ( (1.d0+nut/sigmak)*d2etady2 + detady*(dnutdy -(nut/sigmak)*dsigmakdy)/sigmak )
+    C_k = deta * detady / ( 4.d0 * A_k )
+    E_k = deta * B_k / ( 4.d0 * A_k )
+    sigma_K = (nut*dUdy*dUdy - eps_hat - eps) * (deta**2.d0) / ( 2.d0 * A_k)
 
-    b_w = D_w + F_w/2.d0
-    b_e = D_e - F_e/2.d0 
-    b_p = D_w + D_e
-    b_ee = 0.d0
-    b_ww = 0.d0
+    D_w = 5.d-01 - E_k
+    D_e = 5.d-01 + E_k
+    F_ww = C_k*Uww
+    F_w = C_k*Uw
+    F_e = C_k*Ue
+    F_ee = C_k*Uee
+    F_p = C_k*Up
+
+    beta = 1.d0
+    gamma = -1.d0
+
+    b_w = D_w - gamma * F_w
+    b_e = D_e - beta * F_e
+    b_p = 1.d0 - F_p * ( beta + gamma ) * 3.d0 / 4.d0
+    b_ee = - F_ee * ( 4.d0 -3.d0 * beta +  gamma ) / 8.d0
+    b_ww = F_ww * ( 4.d0 +3.d0 * gamma - beta ) / 8.d0
 
     if ( (b_e < 0.d0) .and. (b_w >= 0.d0) ) then
-        !print*, '(b_e < 0.d0) .and. (b_w >= 0.d0)'
-        b_ee =  0.d0
-        b_e = D_e - F_e/3.d0
-        b_w = D_w + F_w
-        b_ww = - F_ww/6.d0
-        b_p = D_e + D_w + F_p/2.d0
+        beta = D_e / F_e
+        gamma = -1.d0
     else if( (b_w < 0.d0) .and. (b_e >= 0.d0) ) then
-        !print*, '(b_w < 0.d0) .and. (b_e >= 0.d0)'
-        b_ww = 0.d0
-        b_w = D_w + F_w/3.d0
-        b_e = D_e - F_e
-        b_ee = F_ee/6.d0
-        b_p = D_w + D_e - F_p/2.d0
+        gamma = D_w /F_w
+        beta = 1.d0
     else if( (b_w < 0.d0) .and. (b_e < 0.d0) ) then
-        b_w = D_w + F_p/2.d0
-        b_e = D_e - F_p/2.d0  
-        b_p = D_w + D_e +(F_e - F_w)/2.d0
+        beta = D_e / F_e
+        gamma = D_w /F_w
+    else
+        beta = 1.d0
+        gamma = -1.d0
     endif
 
-    !b_w = max(max(D_w + F_w/2.d0,F_w),0.d0)
-    !b_e = max(max(D_e - F_e/2.d0,-F_e),0.d0) 
-    !b_p = b_w + b_e + (F_e - F_w)/2.d0
+    b_w = D_w - gamma * F_w
+    b_e = D_e - beta * F_e
+    b_p = 1.d0 - F_p * ( beta + gamma ) * 3.d0 / 4.d0
+    b_ee = - F_ee * ( 4.d0 -3.d0 * beta +  gamma ) / 8.d0
+    b_ww = F_ww * ( 4.d0 +3.d0 * gamma - beta ) / 8.d0
 
     aK_ww = b_ww / b_p
     aK_w = b_w / b_p
@@ -67,7 +71,7 @@ subroutine  K_coefficients(aK_ww,aK_w,aK_e,aK_ee,sK,eps,nut,dnutdy,nup,dnupdy,dU
 !!!*								               *
 !!!*************************************************
     
-subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak,dsigmakdy,eps_hat,ny,upk)
+subroutine  solve_Kt_2(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak,dsigmakdy,eps_hat,ny,upk)
     implicit none
     integer, intent(in) :: ny
     real*8, intent(in) :: eps(1:ny),dUdy(1:ny),nut(1:ny),dnutdy(1:ny),detady(1:ny),d2etady2(1:ny),deta,sigmak(1:ny)
@@ -90,18 +94,6 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak
     call ddy(ny,Kt,dKtdy,detady,deta)
     call ddy(ny,eps,depsdy,detady,deta)
 
-    nup = ( eps_hat - d2Ktdy2 ) / ( 2.d0 * ( eps + eps_hat ) )
-    
-    dnupdy = - 0*nup * ( depsdy / ( eps + eps_hat ) + 0*(1.d0 - 2.d0 *nup ) * dKtdy / Kt ) &
-    - 0*d3Ktdy3 / ( 2.d0 * ( eps + eps_hat ) )
-    nup = 0.d0
-    !print*, 'nup(1) = ',nup(1),'; nup(ny) = ',nup(ny)
-    !print*, 'nup(2) = ',nup(2),'; nup(ny-1) = ',nup(ny-1),'; dnupdy(2) = ',dnupdy(2),'; dnupdy(ny-1) = ',dnupdy(ny-1)
-
-    dnupdy(1) = 0.d0
-    dnupdy(ny) = 0.d0
-    !call linear_variable_smoother(dnupdy,dnupdy,0.d0*dnupdy,ny)
-
     !!! This is the problem
     upk = ( d2Ktdy2 - eps_hat ) * dKtdy / ( 2.d0 * Kt * (eps + eps_hat))
     upk(1) = 2.d0*upk(2)
@@ -111,7 +103,7 @@ subroutine  solve_Kt(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigmak
     Kt(1) = 0.d0
     Kt(2) = Kt(3)/4.d0
     do j =3,ny-2
-        call K_coefficients(aK_ww,aK_w,aK_e,aK_ee,sK,eps(j),nut(j),dnutdy(j),nup(j),dnupdy(j),dUdy(j),deta,sigmak(j), &
+        call K_coefficients_2(aK_ww,aK_w,aK_e,aK_ee,sK,eps(j),nut(j),dnutdy(j),dUdy(j),deta,sigmak(j), &
             dsigmakdy(j), upk(j-2), upk(j-1),upk(j), upk(j+1), upk(j+2), eps_hat(j), d2etady2(j),detady(j))
         if (aK_e < 0.d0) then
             print*, "aK_e=",aK_e, " j=",j
