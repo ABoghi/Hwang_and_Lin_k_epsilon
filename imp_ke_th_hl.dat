@@ -1,6 +1,6 @@
 .F.     ! flag
 1800        ! ny
-100      ! niter
+10      ! niter
 150         ! Re_tau
 2.d-02      ! dy_min
 1.d+00      ! Pr
