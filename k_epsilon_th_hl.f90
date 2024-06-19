@@ -2248,47 +2248,98 @@ subroutine  solve_Kt_b(Kt,eps,dUdy,nut,dnutdy,detady,d2etady2,d3etady3,deta,sigm
     call K_coefficients_b(deltak,thetak,sK,dKtdy(2),d2Ktdy2(2),d3Ktdy3(2),depsdy(2),deps_hatdy(2),eps(2),eps_hat(2),nut(2), &
         sigmak(2), dnutdy(2), dsigmakdy(2),dUdy(2),detady(2),d2etady2(2),d3etady3(2),deta)
     !aK_ww,aK_w,aK_e,aK_ee
+    call K_coefficients_b_forward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+    Kt(2) = sK + aK_eee * Kt(5) + aK_ee * Kt(4) + aK_e * Kt(3) + aK_w * Kt(1)
+    do j =3,ny-2
+        call K_coefficients_b(deltak,thetak,sK,dKtdy(j),d2Ktdy2(j),d3Ktdy3(j),depsdy(j),deps_hatdy(j),eps(j),eps_hat(j),nut(j), &
+            sigmak(j), dnutdy(j), dsigmakdy(j),dUdy(j),detady(j),d2etady2(j),d3etady3(j),deta)
+        call K_coefficients_b_central(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+        if(aK_w < 0.d0) then 
+            !print*, "j = ", j, "; aK_w = ", aK_w, "; aK_e = ", aK_e
+            call K_coefficients_b_forward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+            Kt(j) = sK + aK_eee * Kt(j+3) + aK_ee * Kt(j+2) + aK_e * Kt(j+1) + aK_w * Kt(j-1)
+        else if(aK_e < 0.d0) then 
+            call K_coefficients_b_backward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+            Kt(j) = sK + aK_e * Kt(j+1) + aK_w * Kt(j-1) + aK_ww * Kt(j-2) + aK_www * Kt(j-3)
+        else
+            Kt(j) = sK + aK_ee * Kt(j+2) + aK_e * Kt(j+1) + aK_w * Kt(j-1) + aK_ww * Kt(j-2)
+        endif
+    enddo
+    call K_coefficients_b(deltak,thetak,sK,dKtdy(ny-1),d2Ktdy2(ny-1),d3Ktdy3(ny-1),depsdy(ny-1),deps_hatdy(ny-1),eps(ny-1), &
+        eps_hat(ny-1), nut(ny-1),sigmak(ny-1), dnutdy(ny-1), dsigmakdy(ny-1),dUdy(ny-1),detady(ny-1),d2etady2(ny-1), &
+        d3etady3(ny-1), deta)
+    !aK_ww,aK_w,aK_e,aK_ee
+    call K_coefficients_b_backward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+    Kt(ny-1) = sK + aK_e * Kt(ny) + aK_w * Kt(ny-2) + aK_ww * Kt(ny-3) + aK_www * Kt(ny-4)
+    Kt(ny) = 0.d0
+
+    end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*            Coeffcients Kt                        *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  K_coefficients_b_central(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+    implicit none
+    real*8, intent(in) :: deltak,thetak
+    real*8, intent(inout) :: sK
+    real*8, intent(out) :: aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee
+
+    aK_www = 0.d0
+    aK_ww = - ( thetak / 2.d0 )
+    aK_w = ( 1.d0 / 2.d0 - deltak + thetak )
+    aK_e = ( 1.d0 / 2.d0 + deltak - thetak )
+    aK_ee = ( thetak / 2.d0 )
+    aK_eee = 0.d0
+
+    sK = sK
+
+    end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*            Coeffcients Kt                        *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  K_coefficients_b_forward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+    implicit none
+    real*8, intent(in) :: deltak,thetak
+    real*8, intent(inout) :: sK
+    real*8, intent(out) :: aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee
+
     aK_www = 0.d0
     aK_ww = 0.d0
     aK_w = ( 1.d0 / 2.d0 - deltak - 3.d0 * thetak / 2.d0 ) / ( 1.d0 - 5.d0 * thetak )
     aK_e = ( 1.d0 / 2.d0 + deltak - 6.d0 * thetak ) / ( 1.d0 - 5.d0 * thetak )
     aK_ee = 3.d0 * thetak / ( 1.d0 - 5.d0 * thetak )
     aK_eee = - ( thetak / 2.d0 ) / ( 1.d0 - 5.d0 * thetak )
-    Kt(2) = ( sK  - ( thetak / 2.d0 ) * Kt(5) + 3.d0 * thetak * Kt(4) + ( 1.d0 / 2.d0 + deltak - 6.d0 * thetak ) * Kt(3) &
-        + ( 1.d0 / 2.d0 - deltak - 3.d0 * thetak / 2.d0 ) * Kt(1) ) / ( 1.d0 - 5.d0 * thetak )
-    do j =3,ny-2
-        call K_coefficients_b(deltak,thetak,sK,dKtdy(j),d2Ktdy2(j),d3Ktdy3(j),depsdy(j),deps_hatdy(j),eps(j),eps_hat(j),nut(j), &
-            sigmak(j), dnutdy(j), dsigmakdy(j),dUdy(j),detady(j),d2etady2(j),d3etady3(j),deta)
-        aK_www = 0.d0
-        aK_ww = - ( thetak / 2.d0 )
-        aK_w = ( 1.d0 / 2.d0 - deltak + thetak )
-        aK_e = ( 1.d0 / 2.d0 + deltak - thetak )
-        aK_ee = ( thetak / 2.d0 )
-        aK_eee = 0.d0
-        if(aK_w < 0.d0) then 
-            print*, "aK_w"
-            print*, j,aK_w
-        endif
-        if(aK_e < 0.d0) then 
-            print*, "aK_e"
-            print*, j,aK_e
-        endif
-        Kt(j) = sK + aK_ee * Kt(j+2) + aK_e * Kt(j+1) + aK_w * Kt(j-1) + aK_ww * Kt(j-2)
-    enddo
-    call K_coefficients_b(deltak,thetak,sK,dKtdy(ny-1),d2Ktdy2(ny-1),d3Ktdy3(ny-1),depsdy(ny-1),deps_hatdy(ny-1),eps(ny-1), &
-        eps_hat(ny-1), nut(ny-1),sigmak(ny-1), dnutdy(ny-1), dsigmakdy(ny-1),dUdy(ny-1),detady(ny-1),d2etady2(ny-1), &
-        d3etady3(ny-1), deta)
-    !aK_ww,aK_w,aK_e,aK_ee
+    sK = sK / ( 1.d0 - 5.d0 * thetak ) 
+
+    end
+
+!!!*************************************************
+!!!*						         	           *
+!!!*            Coeffcients Kt                        *
+!!!*								               *
+!!!*************************************************
+    
+subroutine  K_coefficients_b_backward(aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee, deltak, thetak, sK)
+    implicit none
+    real*8, intent(in) :: deltak,thetak
+    real*8, intent(inout) :: sK
+    real*8, intent(out) :: aK_www, aK_ww, aK_w, aK_e, aK_ee, aK_eee
+
     aK_www = ( thetak / 2.d0 ) / ( 1.d0 + 5.d0 * thetak )
     aK_ww = - 3.d0 * thetak / ( 1.d0 + 5.d0 * thetak )
     aK_w = ( 1.d0 / 2.d0 - deltak + 6.d0 * thetak ) / ( 1.d0 + 5.d0 * thetak )
     aK_e = ( 1.d0 / 2.d0 + deltak + 3.d0 * thetak / 2.d0 ) / ( 1.d0 + 5.d0 * thetak )
     aK_ee = 0.d0
     aK_eee = 0.d0
-    Kt(ny-1) = ( sK  + ( 1.d0 / 2.d0 + deltak + 3.d0 * thetak / 2.d0 ) * Kt(ny) &
-        + ( 1.d0 / 2.d0 - deltak + 6.d0 * thetak ) * Kt(ny-2) &
-        - 3.d0 * thetak * Kt(ny-3) + ( thetak / 2.d0 ) * Kt(ny-4) ) / ( 1.d0 + 5.d0 * thetak )
-    Kt(ny) = 0.d0
+
+    sK = sK / ( 1.d0 + 5.d0 * thetak )
 
     end
 
